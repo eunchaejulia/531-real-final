@@ -1,21 +1,34 @@
-export default async function handler(req, res) {
-  try {
-    const prompt = req.body.prompt;
+const { InferenceClient } = require("huggingface-hub");
 
-    const response = await fetch("https://eunchaejulia-noala.hf.space/api/predict", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ data: [prompt] })
+const client = new InferenceClient({
+  token: process.env.HF_API_TOKEN,
+});
+
+module.exports = async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method Not Allowed');
+    return;
+  }
+
+  try {
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      res.status(400).json({ error: "Invalid 'messages' format" });
+      return;
+    }
+
+    const response = await client.chatCompletion({
+      model: "HuggingFaceH4/zephyr-7b-beta",
+      messages,
+      temperature: 0.7,
+      top_p: 0.95,
+      max_tokens: 512,
     });
 
-    const data = await response.json();
-    const reply = data?.data?.[0] || "모델 응답 없음";
-
-    res.status(200).json({ reply });
-  } catch (err) {
-    console.error("❌ 서버 오류:", err);
-    res.status(500).json({ reply: "서버 오류 발생" });
+    res.status(200).json(response);
+  } catch (error) {
+    console.error("🔥 Error from HF API:", error);
+    res.status(500).json({ error: error.message });
   }
-}
+};
