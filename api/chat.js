@@ -1,34 +1,29 @@
-const { InferenceClient } = require("huggingface-hub");
-
-const client = new InferenceClient({
-  token: process.env.HF_API_TOKEN,
-});
+const fetch = require("node-fetch");
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method Not Allowed');
-    return;
-  }
-
   try {
-    const { messages } = req.body;
+    const { prompt } = req.body;
 
-    if (!messages || !Array.isArray(messages)) {
-      res.status(400).json({ error: "Invalid 'messages' format" });
-      return;
-    }
-
-    const response = await client.chatCompletion({
-      model: "HuggingFaceH4/zephyr-7b-beta",
-      messages,
-      temperature: 0.7,
-      top_p: 0.95,
-      max_tokens: 512,
+    const response = await fetch("https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta", {
+      headers: {
+        Authorization: `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      method: "POST",
+      body: JSON.stringify({ inputs: prompt })
     });
 
-    res.status(200).json(response);
-  } catch (error) {
-    console.error("🔥 Error from HF API:", error);
-    res.status(500).json({ error: error.message });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Inference API Error:", errorText);
+      return res.status(response.status).json({ error: "Inference API failed", detail: errorText });
+    }
+
+    const data = await response.json();
+    const text = data.generated_text || data[0]?.generated_text || "응답 없음";
+    res.status(200).json({ text });
+  } catch (err) {
+    console.error("Server Error:", err);
+    res.status(500).json({ error: "Server error", detail: err.toString() });
   }
 };
